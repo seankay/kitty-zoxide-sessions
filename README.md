@@ -80,3 +80,9 @@ default template.
 - Session file name: `<directory>.kitty-session`
 - Template file: `default.kitty-session` (must live next to the script)
 - Log file: `<session_dir>/kitty-zoxide-sessions.log`
+
+## Credits
+
+- https://github.com/joshmedeski/sesh
+- https://github.com/LazyStability/kitty-sessionizer
+- https://github.com/ThePrimeagen/tmux-sessionizer
