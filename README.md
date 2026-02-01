@@ -45,6 +45,8 @@ Options:
 ```text
 -d, --debug       Enable debug logging
 -e, --edit        Edit the session file instead of opening it
+-D, --delete      Delete a session file
+    --delete-all  Delete all session files (with confirmation)
 -c, --auto-close  Close the launcher window on selection
 -t, --template    Path to a custom kitty session template
 ```
