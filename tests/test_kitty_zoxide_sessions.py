@@ -155,7 +155,7 @@ def test_ensure_session_file_fallsback_to_default_template(module, tmp_path):
  
     assert isinstance(session_file, Path)
     session_file_contents = session_file.read_text(encoding="utf-8")
-    assert "new_tab nvim" in session_file_contents
+    assert "new_tab proj" in session_file_contents
     assert "cd /path/to/proj" in session_file_contents
     assert "launch --title \"proj\"" in session_file_contents
 
