@@ -4,6 +4,10 @@
 history with fzf. It builds a kitty session file on demand and opens it via
 `kitten @ action goto_session`.
 
+## Preview
+<img width="1632" height="1370" alt="image" src="https://github.com/user-attachments/assets/21019fdd-3ef8-4ad4-b8f5-f989fbb2132e" />
+
+
 ## Features
 
 - Query recent directories from `zoxide`
