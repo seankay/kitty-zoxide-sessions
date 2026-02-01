@@ -2,7 +2,7 @@
 
 `kitty-zoxide-sessions` is a small helper that lets you jump to kitty sessions from your zoxide
 history with fzf. It builds a kitty session file on demand and opens it via
-`kitten @ action goto_session`.
+`kitten @ action goto_session`. Use a custom keybind with this script to quickly navigate between kitty sessions.
 
 ## Preview
 
