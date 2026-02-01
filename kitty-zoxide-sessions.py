@@ -5,6 +5,7 @@ import argparse
 import atexit
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -13,6 +14,8 @@ from pathlib import Path
 
 
 LOGGER = logging.getLogger("kitty-zoxide-sessions")
+SESSION_ENTRY="session"
+PATH_ENTRY="path"
 
 def close_launcher_window(window_id: str | None) -> None:
     if not window_id:
@@ -44,6 +47,13 @@ def emit(message: str, *, stderr: bool = False) -> None:
         LOGGER.error(message)
     else:
         LOGGER.info(message)
+
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", text)
 
 
 def log(message: str, enabled: bool) -> None:
@@ -185,7 +195,7 @@ class DeleteSession(Operation):
             return 1
 
         candidates = "\n".join(path.stem for path in session_files)
-        session_name, selection_status = select_item(candidates, "💣 delete session > ")
+        session_name, selection_status = select_item(candidates, "delete session > ")
         if selection_status != 0:
             return selection_status
 
@@ -203,7 +213,6 @@ class DeleteSession(Operation):
                 stderr=True,
             )
             return 1
-
         emit(f"Deleted session: {session_name}")
         log(f"Deleted session file: {session_file}", self.context.debug)
         return 0
@@ -285,24 +294,15 @@ class SessionSelection(Operation):
 
         return result.stdout
 
-
     def run(self) -> int:
-        candidates = self.run_zoxide()
-        if candidates is None:
+        zoxide_output = self.run_zoxide()
+        if zoxide_output is None:
             return 1
 
-        session_path, selection_status = select_item(candidates, "⚡ session > ")
-        if selection_status != 0:
-            return selection_status
-
-        if not session_path:
-            emit("No session selected", stderr=True)
-            emit(self.context.parser.format_help(), stderr=True)
-            return 1
-
-        session_name = Path(session_path).name
-
-        log(f"Variables set: session={session_name} path={session_path}", self.context.debug)
+        zoxide_paths = [path for path in zoxide_output.splitlines() if path]
+        zoxide_by_name: dict[str, str] = {}
+        for path in zoxide_paths:
+            zoxide_by_name.setdefault(Path(path).name, path)
 
         try:
             self.context.session_dir.mkdir(parents=True, exist_ok=True)
@@ -310,22 +310,71 @@ class SessionSelection(Operation):
             emit(f"kitty-zoxide-sessions: failed to create session directory ({exc})", stderr=True)
             return 1
 
-        session_file = self.ensure_session_file(
-            self.context.session_dir,
-            session_name,
-            session_path,
-            self.context.debug,
-            self.context.template_path,
+        session_files = list_session_files(self.context.session_dir)
+        session_names = {session_file.stem for session_file in session_files}
+        filtered_zoxide = [path for path in zoxide_paths if Path(path).name not in session_names]
+        entries: list[tuple[str, str, str]] = []
+        for session_file in session_files:
+            entries.append(
+                (f"\x1b[1m[session]\x1b[0m {session_file.stem}", SESSION_ENTRY, str(session_file))
+            )
+        for path in filtered_zoxide:
+            entries.append((f"\x1b[2m[zoxide]\x1b[0m {path}", PATH_ENTRY, path))
+
+        candidates = "\n".join(label for label, _, _ in entries)
+        if not candidates:
+            emit("kitty-zoxide-sessions: no sessions found", stderr=True)
+            return 1
+
+        selection, selection_status = select_item(candidates, "session > ")
+        if selection_status != 0:
+            return selection_status
+
+        if not selection:
+            emit("No session selected", stderr=True)
+            emit(self.context.parser.format_help(), stderr=True)
+            return 1
+
+        selection_plain = strip_ansi(selection)
+        entry = next(
+            (entry for entry in entries if strip_ansi(entry[0]) == selection_plain),
+            None,
         )
-        if isinstance(session_file, int):
-            return session_file
+        if entry is None:
+            emit("kitty-zoxide-sessions: selection could not be resolved", stderr=True)
+            return 1
+
+        _, entry_type, entry_value = entry
+        session_path_from_zoxide = None
+        if entry_type == SESSION_ENTRY:
+            resolved_session_file: Path | int = Path(entry_value)
+            session_name = resolved_session_file.stem
+            session_path_from_zoxide = zoxide_by_name.get(session_name)
+        else:
+            session_name = Path(entry_value).name
+            session_path_from_zoxide = entry_value
+            resolved_session_file = self.ensure_session_file(
+                self.context.session_dir,
+                session_name,
+                session_path_from_zoxide,
+                self.context.debug,
+                self.context.template_path,
+            )
 
         log(
-            f"Opening:{session_file} editing={'yes' if self.editing else ''}",
+            f"Variables set: session={session_name} path={session_path_from_zoxide or 'n/a'}",
             self.context.debug,
         )
 
-        return self.handle_session(session_file)
+        if isinstance(resolved_session_file, int):
+            return resolved_session_file
+
+        log(
+            f"Opening:{resolved_session_file} editing={'yes' if self.editing else ''}",
+            self.context.debug,
+        )
+
+        return self.handle_session(resolved_session_file)
 
 
 class EditSession(SessionSelection):

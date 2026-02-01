@@ -80,6 +80,10 @@ def test_list_session_files_sorted(module, tmp_path):
     assert [path.name for path in files] == ["a.kitty-session", "b.kitty-session"]
 
 
+def test_strip_ansi(module):
+    assert module.strip_ansi("\x1b[1m[session]\x1b[0m demo") == "[session] demo"
+
+
 def test_parse_args_invalid_returns_one(module):
     parser = module.build_parser()
     result = module.parse_args(parser, ["prog", "--nope"])
@@ -121,6 +125,68 @@ def test_ensure_session_file_creates_file(module, tmp_path):
     )
     assert isinstance(session_file, Path)
     assert session_file.read_text(encoding="utf-8") == "path=/path/to/proj name=proj"
+
+
+def test_session_selection_handles_session_entry(module, monkeypatch, tmp_path):
+    session_file = tmp_path / "demo.kitty-session"
+    session_file.write_text("data", encoding="utf-8")
+    context = build_context(module, tmp_path)
+
+    class CapturingSelection(module.SessionSelection):
+        def __init__(self, context):
+            super().__init__(context, editing=False)
+            self.calls = []
+
+        def handle_session(self, session_path):
+            self.calls.append(session_path)
+            return 0
+
+    selection = CapturingSelection(context)
+    monkeypatch.setattr(
+        module.SessionSelection,
+        "run_zoxide",
+        lambda _self: f"{tmp_path / 'demo'}\n{tmp_path / 'other'}\n",
+    )
+    session_label = "\x1b[1m[session]\x1b[0m demo"
+    monkeypatch.setattr(module, "select_item", lambda _c, _p: (session_label, 0))
+
+    assert selection.run() == 0
+    assert selection.calls == [session_file]
+
+
+def test_session_selection_handles_zoxide_entry(module, monkeypatch, tmp_path):
+    template_path = tmp_path / "template.kitty-session"
+    template_path.write_text("path=@@session-path@@ name=@@session@@", encoding="utf-8")
+    context = build_context(module, tmp_path, template_path=template_path)
+
+    class CapturingSelection(module.SessionSelection):
+        def __init__(self, context):
+            super().__init__(context, editing=False)
+            self.calls = []
+
+        def handle_session(self, session_path):
+            self.calls.append(session_path)
+            return 0
+
+    selection = CapturingSelection(context)
+    zoxide_path = str(tmp_path / "proj")
+    monkeypatch.setattr(module.SessionSelection, "run_zoxide", lambda _self: f"{zoxide_path}\n")
+    zoxide_label = f"\x1b[2m[zoxide]\x1b[0m {zoxide_path}"
+    monkeypatch.setattr(module, "select_item", lambda _c, _p: (zoxide_label, 0))
+
+    assert selection.run() == 0
+    session_file = tmp_path / "proj.kitty-session"
+    assert selection.calls == [session_file]
+    assert session_file.read_text(encoding="utf-8") == "path=" + zoxide_path + " name=proj"
+
+
+def test_session_selection_no_entries(module, monkeypatch, tmp_path, capsys):
+    context = build_context(module, tmp_path)
+    selection = DummySelection(module.SessionSelection(context, editing=False))
+    monkeypatch.setattr(module.SessionSelection, "run_zoxide", lambda _self: "")
+
+    assert selection.run() == 1
+    assert "no sessions found" in capsys.readouterr().err
 
 
 def test_delete_session_deletes_file(module, monkeypatch, tmp_path):
