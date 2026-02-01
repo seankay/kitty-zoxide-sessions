@@ -8,8 +8,6 @@ history with fzf. It builds a kitty session file on demand and opens it via
 
 ![gif](https://github.com/user-attachments/assets/6210d8ab-204c-4e4f-8779-65c116a59fda)
 
-![screenshot](https://github.com/user-attachments/assets/21019fdd-3ef8-4ad4-b8f5-f989fbb2132e)
-
 ## Features
 
 - Query recent directories from `zoxide`
