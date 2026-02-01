@@ -1,0 +1,10 @@
+[project]
+name = "kitty-zoxide-sessions"
+version = "0.1.0"
+description = "Kitty + Zoxide + FZF"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.14",
+]
