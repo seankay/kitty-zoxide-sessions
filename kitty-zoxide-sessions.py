@@ -1,6 +1,7 @@
 #!/usr/bin/env python3   
 from __future__ import annotations
 
+import argparse
 import atexit
 import logging
 import os
@@ -8,21 +9,6 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from textwrap import dedent
-
-
-def show_help() -> str:
-    return dedent(
-        """\
-        Usage: kitty-zoxide-sessions [OPTIONS]
-        Options:
-          -d, --debug                  Enable debug logging
-          -e, --edit                   Edit session file
-          -c, --auto-close             Close window on selection
-        
-        For more information about kitty session visit: https://sw.kovidgoyal.net/kitty/sessions/
-        """
-    ).strip()
 
 
 def close_launcher_window(window_id: str | None) -> None:
@@ -170,38 +156,46 @@ def goto_session(session_file: Path) -> int:
     return result.returncode
 
 
-def parse_args(argv: list[str]) -> dict | int:
-    editing = False
-    debug = False
-    auto_close = False
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="kitty-zoxide-sessions",
+        description="Launch a kitty session from zoxide entries.",
+        epilog=(
+            "For more information about kitty sessions visit: "
+            "https://sw.kovidgoyal.net/kitty/sessions/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("-e", "--edit", action="store_true", help="Edit session file")
+    parser.add_argument(
+        "-c",
+        "--auto-close",
+        action="store_true",
+        help="Close window on selection",
+    )
+    return parser
 
-    for arg in argv[1:]:
-        if arg in ("-e", "--edit"):
-            editing = True
-        elif arg in ("-d", "--debug"):
-            debug = True
-        elif arg in ("-c", "--auto-close"):
-            auto_close = True
-        else:
-            emit(show_help())
-            return 1
 
-    return {
-        "editing": editing, 
-        "debug": debug, 
-        "auto_close": auto_close,
-    }
+def parse_args(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.Namespace | int:
+    try:
+        return parser.parse_args(argv[1:])
+    except SystemExit:
+        return 1
 
 
 def main(argv: list[str]) -> int:
     session_dir = resolve_session_dir()
     setup_logging(session_dir)
 
-    parsed = parse_args(argv)
+    parser = build_parser()
+    parsed = parse_args(parser, argv)
     if isinstance(parsed, int):
         return parsed
 
-    editing, debug, auto_close = parsed.values()
+    editing = parsed.edit
+    debug = parsed.debug
+    auto_close = parsed.auto_close
     launcher_window_id = os.environ.get("KITTY_WINDOW_ID")
 
     if auto_close:
@@ -217,7 +211,7 @@ def main(argv: list[str]) -> int:
 
     if not session_path:
         emit("No session selected", stderr=True)
-        emit(show_help(), stderr=True)
+        emit(parser.format_help(), stderr=True)
         return 1
 
     session_name = Path(session_path).name
