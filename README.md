@@ -33,6 +33,7 @@ Options:
 -d, --debug       Enable debug logging
 -e, --edit        Edit the session file instead of opening it
 -c, --auto-close  Close the launcher window on selection
+-t, --template    Path to a custom kitty session template
 ```
 
 ## Example Kitty config
@@ -49,6 +50,16 @@ map ctrl+a>k launch --type=window --bias=25 --location=hsplit zsh -ic "/path/to/
 2. Let you pick a directory with fzf.
 3. Create a kitty session file from `default.kitty-session` if needed.
 4. Either open the session in kitty or open the file in `$EDITOR`.
+
+## Custom templates
+
+Copy `default.kitty-session`, edit it as needed, and pass its path with
+`--template`. If the custom file cannot be read, the script falls back to the
+default template.
+
+```bash
+./kitty-zoxide-sessions.py --template ~/dotfiles/kitty/custom-session.kitty-session
+```
 
 ## Files and paths
 

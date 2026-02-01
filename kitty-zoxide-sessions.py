@@ -94,29 +94,43 @@ def select_session(candidates: str) -> tuple[str, int]:
 
 
 
-def session_data(session_path: str, session_name: str) -> str | int:
-    template_path = Path(__file__).with_name("default.kitty-session")
-    try:
-        template = template_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        emit(f"kitty-zoxide-sessions: failed to read template file ({exc})", stderr=True)
+def session_data(
+    session_path: str,
+    session_name: str,
+    template_path: Path | None,
+) -> str | int:
+    default_template = Path(__file__).with_name("default.kitty-session")
+
+    template = None
+    for candidate in [template_path, default_template]:
+        try:
+            template = candidate.read_text(encoding="utf-8")
+            break
+        except OSError as exc:
+            emit(
+                f"kitty-zoxide-sessions: failed to read template file '{candidate}' ({exc})",
+                stderr=True,
+            )
+
+    if template is None:
         return 1
 
-    return (
-        template.replace("@@session-path@@", session_path)
-        .replace("@@session@@", session_name)
-    )
+    return template.replace("@@session-path@@", session_path).replace("@@session@@", session_name)
 
 
 def ensure_session_file(
-    session_dir: Path, session_name: str, session_path: str, debug: bool
+    session_dir: Path,
+    session_name: str,
+    session_path: str,
+    debug: bool,
+    template_path: Path | None,
 ) -> Path | int:
     session_file = session_dir / f"{session_name}.kitty-session"
 
     if session_file.exists():
         return session_file
 
-    data = session_data(session_path, session_name)
+    data = session_data(session_path, session_name, template_path)
     if isinstance(data, int):
         return data
 
@@ -174,6 +188,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Close window on selection",
     )
+    parser.add_argument(
+        "-t",
+        "--template",
+        help="Path to a custom kitty session template",
+    )
     return parser
 
 
@@ -196,6 +215,7 @@ def main(argv: list[str]) -> int:
     editing = parsed.edit
     debug = parsed.debug
     auto_close = parsed.auto_close
+    template_path = Path(parsed.template).expanduser() if parsed.template else None
     launcher_window_id = os.environ.get("KITTY_WINDOW_ID")
 
     if auto_close:
@@ -224,11 +244,15 @@ def main(argv: list[str]) -> int:
         emit(f"kitty-zoxide-sessions: failed to create session directory ({exc})", stderr=True)
         return 1
 
-    ensured = ensure_session_file(session_dir, session_name, session_path, debug)
-    if isinstance(ensured, int):
-        return ensured
-
-    session_file = ensured
+    session_file = ensure_session_file(
+        session_dir,
+        session_name,
+        session_path,
+        debug,
+        template_path,
+    )
+    if isinstance(session_file, int):
+        return session_file
 
     log(f"Opening:{session_file} editing={'yes' if editing else ''}", debug)
 
