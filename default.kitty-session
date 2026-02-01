@@ -1,0 +1,7 @@
+new_tab nvim
+cd @@session-path@@ 
+launch --title "@@session@@" zsh 
+
+new_tab server
+cd @@session-path@@ 
+launch --title "@@session@@" zsh 
