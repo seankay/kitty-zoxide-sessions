@@ -33,11 +33,12 @@ class DummySelection:
         return 0
 
 
-def build_context(module, session_dir, template_path=None):
+def build_context(module, session_dir, template_path=None, ansi=False):
     return module.AppContext(
         session_dir=session_dir,
         parser=module.build_parser(),
         debug=False,
+        ansi=ansi,
         template_path=template_path,
         launcher_window_id=None,
     )
@@ -95,7 +96,7 @@ def test_select_item_fzf_missing(module, monkeypatch, capsys):
         raise FileNotFoundError
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
-    selection, code = module.select_item("a", "prompt> ")
+    selection, code = module.select_item("a", "prompt> ", ansi=False)
     assert selection == ""
     assert code == 1
     assert "fzf command not found" in capsys.readouterr().err
@@ -106,9 +107,23 @@ def test_select_item_nonzero_return(module, monkeypatch):
         return SimpleNamespace(returncode=2, stdout="choice")
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
-    selection, code = module.select_item("a", "prompt> ")
+    selection, code = module.select_item("a", "prompt> ", ansi=True)
     assert selection == ""
     assert code == 2
+
+
+def test_select_item_with_ansi_passes_flag(module, monkeypatch):
+    calls = []
+
+    def fake_run(args, **_kwargs):
+        calls.append(args)
+        return SimpleNamespace(returncode=0, stdout="picked")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    selection, code = module.select_item("a", "prompt> ", ansi=True)
+    assert selection == "picked"
+    assert code == 0
+    assert "--ansi" in calls[0]
 
 
 def test_ensure_session_file_creates_file(module, tmp_path):
@@ -125,6 +140,24 @@ def test_ensure_session_file_creates_file(module, tmp_path):
     )
     assert isinstance(session_file, Path)
     assert session_file.read_text(encoding="utf-8") == "path=/path/to/proj name=proj"
+
+
+def test_ensure_session_file_fallsback_to_default_template(module, tmp_path):
+    context = build_context(module, tmp_path)
+    selection = DummySelection(module.SessionSelection(context, editing=False))
+    session_file = selection.ensure_session_file(
+            tmp_path,
+            "proj",
+            "/path/to/proj",
+            False,
+            None,
+        )
+ 
+    assert isinstance(session_file, Path)
+    session_file_contents = session_file.read_text(encoding="utf-8")
+    assert "new_tab nvim" in session_file_contents
+    assert "cd /path/to/proj" in session_file_contents
+    assert "launch --title \"proj\"" in session_file_contents
 
 
 def test_session_selection_handles_session_entry(module, monkeypatch, tmp_path):
@@ -147,11 +180,36 @@ def test_session_selection_handles_session_entry(module, monkeypatch, tmp_path):
         "run_zoxide",
         lambda _self: f"{tmp_path / 'demo'}\n{tmp_path / 'other'}\n",
     )
-    session_label = "\x1b[1m[session]\x1b[0m demo"
-    monkeypatch.setattr(module, "select_item", lambda _c, _p: (session_label, 0))
+    session_label = "[session] demo"
+    monkeypatch.setattr(module, "select_item", lambda _c, _p, ansi: (session_label, 0))
 
     assert selection.run() == 0
     assert selection.calls == [session_file]
+
+
+def test_session_selection_uses_ansi_labels_when_enabled(module, monkeypatch, tmp_path):
+    session_file = tmp_path / "demo.kitty-session"
+    session_file.write_text("data", encoding="utf-8")
+    context = build_context(module, tmp_path, ansi=True)
+
+    class CapturingSelection(module.SessionSelection):
+        def __init__(self, context):
+            super().__init__(context, editing=False)
+
+        def handle_session(self, _session_path):
+            return 0
+
+    selection = CapturingSelection(context)
+    monkeypatch.setattr(module.SessionSelection, "run_zoxide", lambda _self: "")
+
+    def fake_select_item(candidates, _prompt, ansi):
+        assert ansi is True
+        assert "\x1b[1m[session]\x1b[0m" in candidates
+        return "\x1b[1m[session]\x1b[0m demo", 0
+
+    monkeypatch.setattr(module, "select_item", fake_select_item)
+
+    assert selection.run() == 0
 
 
 def test_session_selection_handles_zoxide_entry(module, monkeypatch, tmp_path):
@@ -171,8 +229,8 @@ def test_session_selection_handles_zoxide_entry(module, monkeypatch, tmp_path):
     selection = CapturingSelection(context)
     zoxide_path = str(tmp_path / "proj")
     monkeypatch.setattr(module.SessionSelection, "run_zoxide", lambda _self: f"{zoxide_path}\n")
-    zoxide_label = f"\x1b[2m[zoxide]\x1b[0m {zoxide_path}"
-    monkeypatch.setattr(module, "select_item", lambda _c, _p: (zoxide_label, 0))
+    zoxide_label = f"[zoxide] {zoxide_path}"
+    monkeypatch.setattr(module, "select_item", lambda _c, _p, ansi: (zoxide_label, 0))
 
     assert selection.run() == 0
     session_file = tmp_path / "proj.kitty-session"
@@ -194,7 +252,7 @@ def test_delete_session_deletes_file(module, monkeypatch, tmp_path):
     session_file.write_text("data", encoding="utf-8")
     context = build_context(module, tmp_path)
 
-    def fake_select_item(_candidates, _prompt):
+    def fake_select_item(_candidates, _prompt, ansi):
         return "demo", 0
 
     monkeypatch.setattr(module, "select_item", fake_select_item)

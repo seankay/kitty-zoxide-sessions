@@ -67,10 +67,13 @@ def resolve_session_dir() -> Path:
     return base_dir / "kitty-sessions"
 
 
-def select_item(candidates: str, prompt: str) -> tuple[str, int]:
+def select_item(candidates: str, prompt: str, *, ansi: bool) -> tuple[str, int]:
     try:
+        fzf_command = ["fzf", "--reverse", "--no-sort", "--prompt", prompt]
+        if ansi:
+            fzf_command.insert(1, "--ansi")
         proc = subprocess.run(
-            ["fzf", "--ansi", "--reverse", "--no-sort", "--prompt", prompt],
+            fzf_command,
             input=candidates,
             stdout=subprocess.PIPE,
             text=True,
@@ -106,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-e", "--edit", action="store_true", help="Edit session file")
     parser.add_argument("-D", "--delete", action="store_true", help="Delete a session file")
     parser.add_argument("--delete-all", action="store_true", help="Delete all session files")
+    parser.add_argument("--ansi", action="store_true", help="Enable ANSI formatting in fzf")
     parser.add_argument(
         "-c",
         "--auto-close",
@@ -132,6 +136,7 @@ class AppContext:
     session_dir: Path
     parser: argparse.ArgumentParser
     debug: bool
+    ansi: bool
     template_path: Path | None
     launcher_window_id: str | None
 
@@ -195,7 +200,11 @@ class DeleteSession(Operation):
             return 1
 
         candidates = "\n".join(path.stem for path in session_files)
-        session_name, selection_status = select_item(candidates, "delete session > ")
+        session_name, selection_status = select_item(
+            candidates,
+            "delete session > ",
+            ansi=self.context.ansi,
+        )
         if selection_status != 0:
             return selection_status
 
@@ -235,7 +244,7 @@ class SessionSelection(Operation):
         default_template = Path(__file__).with_name("default.kitty-session")
 
         template = None
-        for candidate in [template_path, default_template]:
+        for candidate in [path for path in (template_path, default_template) if path]:
             try:
                 template = candidate.read_text(encoding="utf-8")
                 break
@@ -261,6 +270,7 @@ class SessionSelection(Operation):
     ) -> Path | int:
         session_file = session_dir / f"{session_name}.kitty-session"
 
+        print(session_file)
         if session_file.exists():
             return session_file
 
@@ -294,6 +304,9 @@ class SessionSelection(Operation):
 
         return result.stdout
 
+    def label(self, label_text: str, ansi: bool) -> str:
+        return f"\x1b[1m{label_text}\x1b[0m" if ansi else label_text
+
     def run(self) -> int:
         zoxide_output = self.run_zoxide()
         if zoxide_output is None:
@@ -314,19 +327,21 @@ class SessionSelection(Operation):
         session_names = {session_file.stem for session_file in session_files}
         filtered_zoxide = [path for path in zoxide_paths if Path(path).name not in session_names]
         entries: list[tuple[str, str, str]] = []
+        session_label = self.label("[session]", self.context.ansi)
+        path_label = self.label("[zoxide]", self.context.ansi)
         for session_file in session_files:
             entries.append(
-                (f"\x1b[1m[session]\x1b[0m {session_file.stem}", SESSION_ENTRY, str(session_file))
+                (f"{session_label} {session_file.stem}", SESSION_ENTRY, str(session_file))
             )
         for path in filtered_zoxide:
-            entries.append((f"\x1b[2m[zoxide]\x1b[0m {path}", PATH_ENTRY, path))
+            entries.append((f"{path_label} {path}", PATH_ENTRY, path))
 
         candidates = "\n".join(label for label, _, _ in entries)
         if not candidates:
             emit("kitty-zoxide-sessions: no sessions found", stderr=True)
             return 1
 
-        selection, selection_status = select_item(candidates, "session > ")
+        selection, selection_status = select_item(candidates, "session > ", ansi=self.context.ansi)
         if selection_status != 0:
             return selection_status
 
@@ -430,6 +445,7 @@ def main(argv: list[str]) -> int:
     delete_all = parsed.delete_all
     debug = parsed.debug
     auto_close = parsed.auto_close
+    ansi = parsed.ansi
     template_path = Path(parsed.template).expanduser() if parsed.template else None
     launcher_window_id = os.environ.get("KITTY_WINDOW_ID")
 
@@ -448,6 +464,7 @@ def main(argv: list[str]) -> int:
         session_dir=session_dir,
         parser=parser,
         debug=debug,
+        ansi=ansi,
         template_path=template_path,
         launcher_window_id=launcher_window_id,
     )
