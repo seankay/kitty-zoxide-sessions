@@ -2,8 +2,7 @@
 
 `kitty-zoxide-sessions` is a small helper that lets you jump to kitty sessions from your zoxide
 history with fzf. It builds a kitty session file on demand and opens it via
-`kitten @ action goto_session`, or launches your editor so you can tweak the
-session definition.
+`kitten @ action goto_session`.
 
 ## Features
 
@@ -16,10 +15,18 @@ session definition.
 ## Requirements
 
 - Python 3.10+
-- `kitty` + `kitten` on your PATH
+- `kitty`
 - `zoxide`
 - `fzf`
-- An editor (defaults to `nvim` if `$EDITOR` is unset)
+
+## Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/seankay/kitty-zoxide-sessions/main/install.sh | sh
+```
+
+The installer drops `kitty-zoxide-sessions.py` and `default.kitty-session` into
+`~/.local/bin`. Set `BINDIR` to customize the destination.
 
 ## Usage
 
