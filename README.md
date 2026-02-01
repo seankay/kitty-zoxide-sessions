@@ -47,7 +47,7 @@ Options:
 -e, --edit        Edit the session file instead of opening it
 -D, --delete      Delete a session file
     --delete-all  Delete all session files (with confirmation)
--    --ansi        Enable ANSI formatting in fzf
+    --ansi        Enable ANSI formatting in fzf
 -c, --auto-close  Close the launcher window on selection
 -t, --template    Path to a custom kitty session template
 ```
@@ -74,6 +74,9 @@ Pressing `ctrl+a` followed by `k` will open the picker.
 Copy `default.kitty-session`, edit it as needed, and pass its path with
 `--template`. If the custom file cannot be read, the script falls back to the
 default template.
+
+> [!NOTE]
+> For information on how to create Kitty session files visit: https://sw.kovidgoyal.net/kitty/sessions/
 
 ```bash
 ./kitty-zoxide-sessions.py --template ~/dotfiles/kitty/custom-session.kitty-session
