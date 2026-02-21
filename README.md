@@ -55,7 +55,7 @@ Options:
 In kitty.conf:
 
 ```
-map ctrl+a>k launch --type=window --bias=25 --location=hsplit zsh -ic "/path/to/script/kitty-zoxide-sessions.py --auto-close; exec zsh"
+map ctrl+a>k launch --type=window --bias=25 --location=hsplit $HOME/.local/bin/kitty-zoxide-sessions --auto-close --ansi
 ```
 
 Pressing `ctrl+a` followed by `k` will open the picker.
